@@ -7,6 +7,10 @@
 
 setup() {
   LIB="$BATS_TEST_DIRNAME/../scripts/lib.sh"
+  # herdr_bin binds to HERDR_BIN_PATH at source time; a leaking exported
+  # value (e.g. /opt/homebrew/bin/herdr) would make pick_acquire exec the
+  # real herdr instead of the stub the PATH trick targets.
+  unset HERDR_BIN_PATH
   # shellcheck disable=SC1090
   . "$LIB"
 
@@ -658,6 +662,30 @@ SCRIPT
 @test "expand_elided: a token with no ellipsis is untouched" {
   run expand_elided "scripts/lib.sh"
   [ "$output" = "scripts/lib.sh" ]
+}
+
+# ---- a terminal-clipped path (autowrap off, no ellipsis marker) still opens ----
+
+@test "expand_elided: a terminal-clipped path completes to the unique file" {
+  touch "$FIX/clip-2026-08-26-cf-build-minutes-and-workers-builds.md"
+  run expand_elided "$FIX/clip-2026-08-26-cf-build-mi"
+  [ "$output" = "$FIX/clip-2026-08-26-cf-build-minutes-and-workers-builds.md" ]
+}
+
+@test "expand_elided: a terminal-clipped path with several candidates is left alone" {
+  touch "$FIX/c2-a.md" "$FIX/c2-b.md"
+  run expand_elided "$FIX/c2-"
+  [ "$output" = "$FIX/c2-" ]
+}
+
+@test "expand_elided: an existing file is never completed, even path-shaped" {
+  run expand_elided "$FIX/repo/sub/inrepo.md"
+  [ "$output" = "$FIX/repo/sub/inrepo.md" ]
+}
+
+@test "expand_elided: a URL-shaped non-file token is never glob-completed" {
+  run expand_elided "https://example.com/a/b"
+  [ "$output" = "https://example.com/a/b" ]
 }
 
 @test "pad_left: indents every row without disturbing the row count" {

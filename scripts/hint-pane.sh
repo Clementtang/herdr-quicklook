@@ -323,6 +323,12 @@ open_pick() {
     export QUICKLOOK_KEEP_CWD=1
     exec bash "$script_dir/open-in-viewer.sh" "${tokens[$i]}"
   fi
+  # Checked here, before open-popup.sh, so an externally opened file never
+  # spawns (and flashes) a preview pane it would immediately abandon.
+  if [ "${RESOLVED_MODE:-}" = "file" ] && external_open "$RESOLVED_TARGET"; then
+    record_open "${tokens[$i]}"
+    exit 0
+  fi
   # Placement passes through UNSET when nothing chose one: open-popup.sh owns
   # the default, and it needs the distinction - a preview-origin fallback must
   # go to the popup surface, while a pre-filled "overlay" here would read as

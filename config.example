@@ -104,3 +104,13 @@
 # pane under it by only 2-3 highlighted characters, so without the banner a
 # successful open can be invisible. Set 0 to hide it.
 #QUICKLOOK_HINT_BANNER=1
+
+# QUICKLOOK_EXTERNAL_EXTS / QUICKLOOK_EXTERNAL_CMD: extensions (space-separated,
+# case-insensitive) that skip the TTY preview and go to an external command
+# instead, run as `<cmd> <absolute path>`. The media renderer never plays
+# audio/video by design; this is the opt-in way to actually listen to or watch
+# a file a pane printed. Unset (the default) = every file previews as before.
+# CMD defaults to `open` (macOS default app). `qlmanage -p` gives Finder's
+# Quick Look, though its panel opens BEHIND the terminal unless raised.
+#QUICKLOOK_EXTERNAL_EXTS="m4a mp3 wav aac flac mp4 mov"
+#QUICKLOOK_EXTERNAL_CMD="open"

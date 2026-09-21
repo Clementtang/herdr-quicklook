@@ -97,6 +97,10 @@ fi
 
 record_open "$raw"
 
+# Clipboard / recents / agent-pushed opens land here rather than in
+# hint-pane's open_pick; same opt-in hand-off, then the overlay closes.
+external_open "$target" && exit 0
+
 # Render through the render registry (scripts/renderers/, contract
 # documented in lib.sh next to the handler-registry one): render_any walks
 # RENDER_KINDS and dispatches to the first renderer whose match_render_<kind>

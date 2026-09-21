@@ -189,6 +189,27 @@ url_open() {
   fi >/dev/null 2>&1
 }
 
+# external_open <path>: hand a file whose extension is listed in
+# QUICKLOOK_EXTERNAL_EXTS (space-separated, case-insensitive) to
+# QUICKLOOK_EXTERNAL_CMD (default `open`) instead of the TTY preview. The
+# media renderer deliberately never plays audio/video; this is the opt-in
+# escape hatch for kinds a pager cannot really show. rc 1 = not configured,
+# not a file, or not a listed extension, so the caller falls through to the
+# normal preview. nohup: the caller's pane closes right after, and a
+# player the command backgrounds (qlmanage, afplay) must survive that SIGHUP.
+external_open() {
+  local path="$1" ext cmd
+  [ -n "${QUICKLOOK_EXTERNAL_EXTS:-}" ] && [ -f "$path" ] || return 1
+  ext="$(printf '%s' "${path##*.}" | tr '[:upper:]' '[:lower:]')"
+  case " $(printf '%s' "$QUICKLOOK_EXTERNAL_EXTS" | tr '[:upper:]' '[:lower:]') " in
+    *" $ext "*) ;;
+    *) return 1 ;;
+  esac
+  read -ra cmd <<<"${QUICKLOOK_EXTERNAL_CMD:-open}"
+  nohup "${cmd[@]}" "$path" >/dev/null 2>&1 </dev/null
+  return 0
+}
+
 # ---- recents (SG-07): a small "last opened" log, read by the `recents`
 # action / recents-pick pane (scripts/recents.sh, scripts/recents-pane.sh).
 # State lives under a proper state dir, NEVER inside a repo working tree,

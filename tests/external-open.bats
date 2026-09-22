@@ -26,6 +26,17 @@ setup() {
   unset QUICKLOOK_EXTERNAL_EXTS QUICKLOOK_EXTERNAL_CMD QUICKLOOK_SCAN_FAST QUICKLOOK_ROOTS
 }
 
+# external_open detaches the command, so its side effects land after the
+# call returns; poll briefly for the stub's log instead of reading it once.
+stub_log() {
+  local _
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    [ -s "$STUB_LOG" ] && break
+    sleep 0.1
+  done
+  cat "$STUB_LOG"
+}
+
 teardown() {
   cd /
   rm -rf "$FIX"
@@ -59,7 +70,7 @@ teardown() {
   QUICKLOOK_EXTERNAL_CMD="$STUB"
   run external_open "$FIX/home/clips/speaker.m4a"
   [ "$status" -eq 0 ]
-  [ "$(cat "$STUB_LOG")" = "$FIX/home/clips/speaker.m4a" ]
+  [ "$(stub_log)" = "$FIX/home/clips/speaker.m4a" ]
 }
 
 @test "external_open: should match extensions case-insensitively in both directions" {
@@ -67,7 +78,7 @@ teardown() {
   QUICKLOOK_EXTERNAL_CMD="$STUB"
   run external_open "$FIX/home/clips/SHOUT.M4A"
   [ "$status" -eq 0 ]
-  [ "$(cat "$STUB_LOG")" = "$FIX/home/clips/SHOUT.M4A" ]
+  [ "$(stub_log)" = "$FIX/home/clips/SHOUT.M4A" ]
 }
 
 @test "external_open: should pass extra words in the command as separate args" {
@@ -75,5 +86,18 @@ teardown() {
   QUICKLOOK_EXTERNAL_CMD="$STUB -p"
   run external_open "$FIX/home/clips/speaker.m4a"
   [ "$status" -eq 0 ]
-  [ "$(cat "$STUB_LOG")" = "$(printf -- '-p\n%s' "$FIX/home/clips/speaker.m4a")" ]
+  [ "$(stub_log)" = "$(printf -- '-p\n%s' "$FIX/home/clips/speaker.m4a")" ]
+}
+
+@test "external_open: should run the command outside the caller's process group" {
+  # herdr kills a closing pane's whole process group; a player started from
+  # the hint pane must not be in it.
+  printf '#!/bin/sh\nps -o pgid= -p $$ | tr -d " " >"%s"\n' "$STUB_LOG" >"$STUB"
+  QUICKLOOK_EXTERNAL_EXTS="m4a"
+  QUICKLOOK_EXTERNAL_CMD="$STUB"
+  external_open "$FIX/home/clips/speaker.m4a"
+  local own
+  own="$(ps -o pgid= -p $$ | tr -d ' ')"
+  [ -n "$(stub_log)" ]
+  [ "$(stub_log)" != "$own" ]
 }

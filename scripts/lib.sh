@@ -195,8 +195,8 @@ url_open() {
 # media renderer deliberately never plays audio/video; this is the opt-in
 # escape hatch for kinds a pager cannot really show. rc 1 = not configured,
 # not a file, or not a listed extension, so the caller falls through to the
-# normal preview. nohup: the caller's pane closes right after, and a
-# player the command backgrounds (qlmanage, afplay) must survive that SIGHUP.
+# normal preview. The command runs detached (see _detach_run): the caller's
+# pane closes right after, and a player it starts must outlive that.
 external_open() {
   local path="$1" ext cmd
   [ -n "${QUICKLOOK_EXTERNAL_EXTS:-}" ] && [ -f "$path" ] || return 1
@@ -206,8 +206,31 @@ external_open() {
     *) return 1 ;;
   esac
   read -ra cmd <<<"${QUICKLOOK_EXTERNAL_CMD:-open}"
-  nohup "${cmd[@]}" "$path" >/dev/null 2>&1 </dev/null
+  _detach_run "${cmd[@]}" "$path" >/dev/null 2>&1 </dev/null
   return 0
+}
+
+# _detach_run <argv...>: run argv in its own session and return once it is
+# detached. When a plugin pane exits, herdr kills the pane's whole process
+# group, not just SIGHUP (verified on herdr 0.9.0: a qlmanage started by
+# the command died with the pane even under nohup). Double fork + setsid
+# moves argv out of that group; the parent waits for the setsid child, so
+# the caller can exit immediately without racing the detach. perl ships
+# with macOS and every mainstream Linux; without it, nohup is the best
+# remaining effort.
+_detach_run() {
+  if command -v perl >/dev/null 2>&1; then
+    perl -MPOSIX -e '
+      my $pid = fork // die "fork: $!";
+      if ($pid) { waitpid($pid, 0); exit($? >> 8) }
+      POSIX::setsid() or die "setsid: $!";
+      my $grandchild = fork // die "fork: $!";
+      exit 0 if $grandchild;
+      exec @ARGV or die "exec $ARGV[0]: $!";
+    ' "$@"
+  else
+    nohup "$@"
+  fi
 }
 
 # ---- recents (SG-07): a small "last opened" log, read by the `recents`

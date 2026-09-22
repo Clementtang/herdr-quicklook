@@ -68,3 +68,18 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"target(s)"* ]]
 }
+
+@test "hint-pane: should wait for a scan that lands after a second instead of timing out" {
+  # bash 3.2 (macOS /bin/bash, what herdr runs) rejects `read -t 0.1`; the
+  # wait loop used to spin through all 50 polls instantly and report
+  # "scan timed out" before any real scan could finish.
+  LATE="$(mktemp -u)"
+  export QUICKLOOK_HINT_TOKENS_FILE="$LATE"
+  ( sleep 1; printf 'sub/inrepo.md\t1\t\tsub/inrepo.md\n' > "$LATE.part"; mv "$LATE.part" "$LATE" ) &
+  run bash "$PANE" <<<'q'
+  wait
+  rm -f "$LATE" "$TOK"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"scan timed out"* ]]
+  [[ "$output" == *"1 target"* ]]
+}

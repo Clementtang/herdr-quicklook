@@ -54,6 +54,19 @@ cleanup() {
 tty_in=/dev/tty
 { : <"$tty_in"; } 2>/dev/null || tty_in=/dev/stdin
 
+# bash 3.2 (macOS /bin/bash, which herdr runs `bash` as) rejects a fractional
+# `read -t` outright ("invalid timeout specification", rc 1, no wait), so
+# every timed read returned instantly: the scan wait spun its 50 polls in
+# milliseconds and reported "scan timed out". SEQ_TIMEOUT bounds the
+# escape-sequence peeks below; 3.2 gets the smallest integer it accepts.
+if [ "${BASH_VERSINFO[0]}" -ge 4 ]; then
+  FRACTIONAL_READ=1
+  SEQ_TIMEOUT=0.05
+else
+  FRACTIONAL_READ=""
+  SEQ_TIMEOUT=1
+fi
+
 wait_close() {
   printf '%s\n\n(press any key to close)' "$*"
   read -rsn1 _ <"$tty_in" 2>/dev/null || sleep 3
@@ -135,10 +148,14 @@ frame+="$EOD"
 printf '%s' "$frame"
 
 # Wait for the background scan (existence of tokens_file = done), polling the
-# tty so Esc/q aborts mid-scan. Cap ~5s.
+# tty so Esc/q aborts mid-scan. Cap ~5s. Without fractional reads the poll
+# is a plain sleep instead: a key typed meanwhile stays buffered in the tty
+# and the pick loop below reads it the moment the hints paint.
 waited=0
 while [ ! -f "${tokens_file:-/nonexistent}" ]; do
-  if read -t 0.1 -rsn1 key <"$tty_in" 2>/dev/null; then
+  if [ -z "$FRACTIONAL_READ" ]; then
+    sleep 0.1
+  elif read -t 0.1 -rsn1 key <"$tty_in" 2>/dev/null; then
     case "$key" in $'\e' | q | Q) cleanup; exit 0 ;; esac
   fi
   waited=$((waited + 1))
@@ -356,12 +373,12 @@ while IFS= read -rsn1 key <"$tty_in"; do
     $'\e')
       # Either a bare Esc (cancel) or the start of an SGR mouse report
       # (ESC [ < b ; x ; y M/m). Peek with a short timeout.
-      if ! IFS= read -rsn1 -t 0.05 c1 <"$tty_in" 2>/dev/null; then cleanup; exit 0; fi
+      if ! IFS= read -rsn1 -t "$SEQ_TIMEOUT" c1 <"$tty_in" 2>/dev/null; then cleanup; exit 0; fi
       [ "$c1" = "[" ] || { cleanup; exit 0; }
-      IFS= read -rsn1 -t 0.05 c2 <"$tty_in" 2>/dev/null || continue
+      IFS= read -rsn1 -t "$SEQ_TIMEOUT" c2 <"$tty_in" 2>/dev/null || continue
       if [ "$c2" = "<" ]; then
         seq=""
-        while IFS= read -rsn1 -t 0.05 ch <"$tty_in" 2>/dev/null; do
+        while IFS= read -rsn1 -t "$SEQ_TIMEOUT" ch <"$tty_in" 2>/dev/null; do
           case "$ch" in M | m) break ;; *) seq+="$ch" ;; esac
         done
         # press events only; left button = 0
